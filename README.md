@@ -1,37 +1,37 @@
 # Go Real-Time Streaming Architecture
 
-High-frequency event-driven streaming architecture built in Go using NATS / JetStream.
+Production-oriented real-time streaming architecture built in Go using NATS and binary WebSocket delivery.
 
-This project demonstrates how to design and implement a low-latency real-time processing pipeline, using a biomedical signal workload (250 Hz) as a realistic streaming example.
+This project demonstrates how to design a low-latency event-driven pipeline using a high-frequency workload (250 Hz signal stream) as a realistic streaming scenario.
 
-The biomedical signal is used purely as a high-frequency streaming scenario.  
-The architecture itself is domain-agnostic.
+The signal is biomedical-inspired, but the architecture is domain-agnostic and applicable to:
+
+- IoT telemetry
+- Industrial sensors
+- Financial tick streams
+- Edge computing workloads
+- Real-time analytics pipelines
 
 ---
 
 ## 🧠 What This Project Demonstrates
 
-- 250 Hz continuous streaming
+- High-frequency streaming (250 Hz)
+- Binary Float32 pipeline (no JSON overhead in waves)
 - Event-driven decoupled services
-- Real-time peak detection & metric extraction
-- Backpressure-aware batching
-- WebSocket low-latency delivery
-- Clean concurrency model in Go
-- Graceful shutdown & reconnection handling
-
-This simulates real-world high-frequency telemetry pipelines such as:
-
-- IoT sensor networks
-- Medical monitoring systems
-- Industrial telemetry
-- Edge streaming workloads
-- Real-time analytics ingestion
+- Real-time signal processing
+- Horizontal scalability
+- WebSocket binary delivery
+- Backpressure-safe design
+- Dockerized reproducible environment
+- Graceful shutdown
+- Basic observability
 
 ---
 
 ## 🏗 Architecture Overview
 
-Producer (250Hz signal)
+Producer (Float32 batch)
 ↓
 NATS
 ↓
@@ -39,19 +39,10 @@ Processor (Peak detection + HR calculation)
 ↓
 NATS
 ↓
-WebSocket Server (batched streaming)
+WebSocket Server (binary passthrough)
 ↓
-Browser (Canvas rendering @ ~60 FPS)
+Browser (Float32Array rendering @ ~60 FPS)
 
-
-### Design Principles
-
-- Fully decoupled services
-- Stateless processors
-- Horizontal scaling possible at processor layer
-- Message-driven architecture
-- Controlled UI batching (25Hz)
-- Latency-aware processing
 
 ---
 
@@ -59,52 +50,53 @@ Browser (Canvas rendering @ ~60 FPS)
 
 ### Producer
 
-- Generates 250 samples/sec
-- Simulated ECG-like waveform
-- Publishes JSON messages to `ecg.wave`
+- Generates continuous waveform at 250 Hz
+- Batches samples (Float32)
+- Publishes binary payloads to `ecg.wave`
 
 ### Processor
 
 - Subscribes to `ecg.wave`
-- Detects R-peaks with refractory control
-- Calculates RR interval
-- Publishes BPM metrics to `ecg.params`
+- Reads binary Float32 batches
+- Detects R-peaks (with refractory control)
+- Publishes HR metrics to `ecg.params`
 
 ### Server
 
 - Subscribes to NATS
-- Batches wave samples (~40ms interval)
-- Sends array payloads via WebSocket
-- Handles client backpressure
+- Pass-through binary WebSocket delivery
+- Drops slow clients
+- Exposes `/metrics`
+- Graceful shutdown
 
 ### Browser UI
 
-- Uses incremental Canvas rendering
-- Decouples rendering from WebSocket events
-- Maintains smooth visual output
+- Uses `Float32Array`
+- Incremental canvas rendering
+- No JSON parsing for wave data
+- Smooth scrolling visualization
 
 ---
 
-## 📊 Benchmarks (Local M4)
+## 📊 Benchmarks (Local M4 ARM)
 
 | Metric | Result |
 |--------|--------|
-| Producer rate | ~250 msg/sec |
-| Processor latency | ~2–5 ms |
-| WebSocket batch rate | ~25 fps |
+| Producer throughput | ~250 samples/sec |
+| WebSocket batch size | 10 samples |
 | CPU usage | ~2–4% |
 | End-to-end latency | < 15 ms (local) |
+| JSON overhead in waves | 0 |
 
 ---
 
 ## 🔄 Backpressure Strategy
 
-To prevent UI congestion:
-
-- Server batches samples before sending
-- Max batch size enforced
+- Producer batches samples before publishing
+- Server does binary passthrough
 - Slow WebSocket clients are dropped
-- No service blocks the streaming pipeline
+- No blocking on network writes
+- No JSON parsing in wave pipeline
 
 This prevents cascade failure under load.
 
@@ -112,33 +104,65 @@ This prevents cascade failure under load.
 
 ## 🧩 Scaling Considerations
 
-- Multiple processors can subscribe to the same subject
-- Horizontal scaling at processing layer
-- NATS JetStream enables durability if needed
-- WebSocket server can be replicated behind a load balancer
-- Binary streaming mode can reduce overhead further
+The architecture is horizontally scalable:
+
+- Multiple processors can subscribe to `ecg.wave`
+- Stateless processing
+- NATS supports distributed fan-out
+- WebSocket server can run behind a load balancer
+- Docker Compose supports replica scaling
+
+Example:
+
+docker compose up --scale processor=3
+
 
 ---
 
-## 🚀 Running Locally
+## 🐳 Docker Setup
+
+This project is fully containerized.
+
+### Requirements
+
+- Docker Desktop (Apple Silicon supported)
+- Docker Compose
+
+### Run
+
+docker compose up --build
+
+
+Then open:
+
+http://localhost:8080
+
+
+---
+
+## 📈 Metrics Endpoint
+
+http://localhost:8080/metrics
+
+
+Provides:
+
+- Total messages
+- System activity counters
+
+---
+
+## 🚀 Running Without Docker
 
 Start NATS:
 
 nats-server -js
 
 
-Run producer:
+Run services:
 
 go run ./cmd/producer
-
-
-Run processor:
-
 go run ./cmd/processor
-
-
-Run server:
-
 go run ./cmd/server
 
 
@@ -149,43 +173,46 @@ http://localhost:8080
 
 ---
 
-## 🧠 Why Biomedical Signal?
+## 🧠 Why Binary Streaming?
 
-Biomedical streaming (ECG-like waveform) is a realistic high-frequency workload:
+JSON parsing at 250 Hz introduces unnecessary overhead.
 
-- Continuous signal
-- Strict timing requirements
-- Peak detection
-- Low-latency feedback
+This implementation:
 
-However, the architecture is completely generic and can be applied to:
+- Sends Float32 directly
+- Eliminates wave JSON serialization
+- Minimizes latency
+- Reduces CPU usage
+- Keeps server lightweight
 
-- Industrial sensors
-- Financial tick streams
-- Telemetry ingestion pipelines
-- Edge data processing systems
+This reflects production-oriented real-time system design.
 
 ---
 
-## 📌 Future Improvements
+## 📌 Future Enhancements
 
-- Binary WebSocket streaming (Float32Array)
-- Prometheus metrics endpoint
-- Load testing scenario
-- Configurable scaling parameters
-- Distributed processor workers
+- Prometheus metrics integration
+- Distributed load test scenario
+- Burst mode simulation
+- Multi-sensor simulation
+- NATS clustering
+- Persistent JetStream replay
 
 ---
 
 ## 🏁 Summary
 
-This project is not a UI demo.  
-It is a demonstration of designing and implementing a clean real-time streaming architecture in Go.
+This is not a UI demo.
 
-It emphasizes:
+This project demonstrates:
 
-- Event-driven design
-- Throughput control
-- Latency awareness
-- Proper service decoupling
-- Production-oriented thinking
+- Event-driven architecture
+- High-frequency streaming
+- Binary data pipelines
+- Real-time signal processing
+- Distributed-friendly design
+- Production-oriented engineering mindset
+
+The biomedical waveform is simply a realistic high-frequency workload example.
+
+The architecture is fully reusable for any real-time streaming domain.
