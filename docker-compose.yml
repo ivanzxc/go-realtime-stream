@@ -1,0 +1,28 @@
+
+services:
+
+  nats:
+    image: nats:2.10
+    command: ["-js"]
+    ports:
+      - "4222:4222"
+
+  producer:
+    build: .
+    command: ["./producer", "--nats", "nats://nats:4222"]
+    depends_on:
+      - nats
+
+  processor:
+    build: .
+    command: ["./processor", "--nats", "nats://nats:4222"]
+    depends_on:
+      - nats
+
+  server:
+    build: .
+    command: ["./server", "--nats", "nats://nats:4222"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - nats

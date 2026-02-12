@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"log"
+	"math"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -11,11 +13,6 @@ import (
 	"github.com/ivanzxc/go-realtime-stream/internal/analysis"
 	"github.com/ivanzxc/go-realtime-stream/internal/stream"
 )
-
-type WaveMsg struct {
-	Ts int64   `json:"ts"`
-	V  float32 `json:"v"`
-}
 
 type ParamMsg struct {
 	Subject string `json:"subject"`
@@ -27,7 +24,7 @@ func main() {
 
 	var (
 		natsURL = flag.String("nats", "nats://127.0.0.1:4222", "NATS url")
-		subject = flag.String("subject", "ecg.wave", "input subject")
+		in      = flag.String("in", "ecg.wave", "input subject")
 		out     = flag.String("out", "ecg.params", "output subject")
 	)
 	flag.Parse()
@@ -40,29 +37,31 @@ func main() {
 
 	detector := analysis.NewHRDetector()
 
-	_, err = nc.Subscribe(*subject, func(msg *nats.Msg) {
+	_, err = nc.Subscribe(*in, func(msg *nats.Msg) {
 
-		var wave WaveMsg
-		if err := json.Unmarshal(msg.Data, &wave); err != nil {
-			return
-		}
+		samples := len(msg.Data) / 4
 
-		ts := time.UnixMilli(wave.Ts)
+		for i := 0; i < samples; i++ {
 
-		if bpm, ok := detector.Process(wave.V, ts); ok {
+			bits := binary.LittleEndian.Uint32(msg.Data[i*4:])
+			v := math.Float32frombits(bits)
 
-			param := ParamMsg{
-				Subject: *out,
-				Ts:      time.Now().UnixMilli(),
-				HR:      bpm,
+			ts := time.Now()
+
+			if bpm, ok := detector.Process(v, ts); ok {
+
+				param := ParamMsg{
+					Subject: *out,
+					Ts:      time.Now().UnixMilli(),
+					HR:      bpm,
+				}
+
+				b, _ := json.Marshal(param)
+				nc.Publish(*out, b)
+
+				log.Printf("HR detected: %d BPM", bpm)
 			}
-
-			b, _ := json.Marshal(param)
-			nc.Publish(*out, b)
-
-			log.Printf("HR detected: %d BPM", bpm)
 		}
-
 	})
 
 	if err != nil {
@@ -72,4 +71,3 @@ func main() {
 	log.Println("processor running...")
 	select {}
 }
-
