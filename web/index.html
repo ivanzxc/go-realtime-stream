@@ -4,52 +4,53 @@
 <meta charset="utf-8">
 <title>Go Real-Time Stream</title>
 <style>
-body {
-    background: #000;
-    color: #0f0;
-    font-family: monospace;
-}
-#hr {
-    font-size: 32px;
-    margin-bottom: 10px;
-}
-canvas {
-    background: #111;
-}
+  body { background:#000; color:#0f0; font-family: monospace; }
+  #hr { font-size: 28px; margin-bottom: 10px; }
+  canvas { background:#111; }
+  .row { display:flex; gap:16px; align-items:center; }
+  .small { color:#7f7; font-size: 12px; }
 </style>
 </head>
 <body>
 
-<div id="hr">HR: --</div>
-<canvas id="wave" width="800" height="200"></canvas>
+<div class="row">
+  <div id="hr">HR: --</div>
+  <div class="small">
+    Waves: binary Float32Array · Params: JSON ·
+    <a href="/metrics" style="color:#7f7">/metrics</a>
+  </div>
+</div>
+
+<canvas id="wave" width="900" height="250"></canvas>
 
 <script>
 const ws = new WebSocket("ws://" + location.host + "/ws");
+ws.binaryType = "arraybuffer";
 
 const canvas = document.getElementById("wave");
 const ctx = canvas.getContext("2d");
 
-const PX_PER_SAMPLE = 1;   // controla velocidad visual
+const PX_PER_SAMPLE = 2;   // baja a 1 si querés más “lento”
 const SCALE_Y = 80;
 
 let writeX = 0;
 let lastY = canvas.height / 2;
-let hrValue = "--";
 
-let queue = [];
+ctx.strokeStyle = "#0f0";
 
 ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
 
-  if (Array.isArray(data)) {
-    for (const sample of data) {
-      // sample.v
-      const y = canvas.height/2 - sample.v * SCALE_Y;
+  // 1) Binary wave batch (Float32 LE)
+  if (event.data instanceof ArrayBuffer) {
+    const samples = new Float32Array(event.data);
+
+    for (let i = 0; i < samples.length; i++) {
+      const v = samples[i];
+      const y = canvas.height/2 - v * SCALE_Y;
 
       ctx.beginPath();
       ctx.moveTo(writeX, lastY);
       ctx.lineTo(writeX + PX_PER_SAMPLE, y);
-      ctx.strokeStyle = "#0f0";
       ctx.stroke();
 
       lastY = y;
@@ -63,42 +64,17 @@ ws.onmessage = (event) => {
     return;
   }
 
-  // params
-  if (data.hr) {
-    hrValue = data.hr;
-    document.getElementById("hr").innerText = "HR: " + hrValue + " BPM";
+  // 2) Text params (JSON)
+  try {
+    const data = JSON.parse(event.data);
+    if (data.hr) {
+      document.getElementById("hr").innerText = "HR: " + data.hr + " BPM";
+    }
+  } catch (e) {
+    // ignore
   }
 };
-
-function render() {
-
-    while (queue.length > 0) {
-
-        const v = queue.shift();
-        const y = canvas.height/2 - v * SCALE_Y;
-
-        ctx.beginPath();
-        ctx.moveTo(writeX, lastY);
-        ctx.lineTo(writeX + PX_PER_SAMPLE, y);
-        ctx.strokeStyle = "#0f0";
-        ctx.stroke();
-
-        lastY = y;
-        writeX += PX_PER_SAMPLE;
-
-        if (writeX >= canvas.width) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            writeX = 0;
-        }
-    }
-
-    document.getElementById("hr").innerText = "HR: " + hrValue + " BPM";
-
-    requestAnimationFrame(render);
-}
-
-requestAnimationFrame(render);
 </script>
+
 </body>
 </html>
-
