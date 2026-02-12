@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Go Real-Time Stream</title>
+<style>
+body {
+    background: #000;
+    color: #0f0;
+    font-family: monospace;
+}
+#hr {
+    font-size: 32px;
+    margin-bottom: 10px;
+}
+canvas {
+    background: #111;
+}
+</style>
+</head>
+<body>
+
+<div id="hr">HR: --</div>
+<canvas id="wave" width="800" height="200"></canvas>
+
+<script>
+const ws = new WebSocket("ws://" + location.host + "/ws");
+
+const canvas = document.getElementById("wave");
+const ctx = canvas.getContext("2d");
+
+const PX_PER_SAMPLE = 1;   // controla velocidad visual
+const SCALE_Y = 80;
+
+let writeX = 0;
+let lastY = canvas.height / 2;
+let hrValue = "--";
+
+let queue = [];
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  if (Array.isArray(data)) {
+    for (const sample of data) {
+      // sample.v
+      const y = canvas.height/2 - sample.v * SCALE_Y;
+
+      ctx.beginPath();
+      ctx.moveTo(writeX, lastY);
+      ctx.lineTo(writeX + PX_PER_SAMPLE, y);
+      ctx.strokeStyle = "#0f0";
+      ctx.stroke();
+
+      lastY = y;
+      writeX += PX_PER_SAMPLE;
+
+      if (writeX >= canvas.width) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        writeX = 0;
+      }
+    }
+    return;
+  }
+
+  // params
+  if (data.hr) {
+    hrValue = data.hr;
+    document.getElementById("hr").innerText = "HR: " + hrValue + " BPM";
+  }
+};
+
+function render() {
+
+    while (queue.length > 0) {
+
+        const v = queue.shift();
+        const y = canvas.height/2 - v * SCALE_Y;
+
+        ctx.beginPath();
+        ctx.moveTo(writeX, lastY);
+        ctx.lineTo(writeX + PX_PER_SAMPLE, y);
+        ctx.strokeStyle = "#0f0";
+        ctx.stroke();
+
+        lastY = y;
+        writeX += PX_PER_SAMPLE;
+
+        if (writeX >= canvas.width) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            writeX = 0;
+        }
+    }
+
+    document.getElementById("hr").innerText = "HR: " + hrValue + " BPM";
+
+    requestAnimationFrame(render);
+}
+
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
+
