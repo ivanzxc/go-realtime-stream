@@ -216,3 +216,8 @@ This project demonstrates:
 The biomedical waveform is simply a realistic high-frequency workload example.
 
 The architecture is fully reusable for any real-time streaming domain.
+
+
+---
+
+![alt text](./assets/ecgGif.gif)
